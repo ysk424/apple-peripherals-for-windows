@@ -129,7 +129,7 @@ internal sealed class BridgeApplicationContext : ApplicationContext
     {
         keyboard.SetAppleKeyboardPresent(DeviceCatalog.FindAppleKeyboards(devices).Count > 0);
 
-        var groups = DeviceCatalog.FindMagicTrackpads(devices).GroupBy(device => DeviceActions.PhysicalKey(device.Name));
+        var groups = DeviceCatalog.FindMagicTrackpads(devices).Where(ShouldHandleDevice).GroupBy(device => DeviceActions.PhysicalKey(device.Name));
         foreach (var group in groups)
         {
             if (announced.Add(group.Key) && config.EnableMultitouchOnStart)
@@ -141,7 +141,7 @@ internal sealed class BridgeApplicationContext : ApplicationContext
             }
         }
 
-        directReader.UpdateDevices(devices);
+        directReader.UpdateDevices(devices.Where(ShouldHandleDevice));
     }
 
     private void ReenableTrackpads()
@@ -151,7 +151,7 @@ internal sealed class BridgeApplicationContext : ApplicationContext
             return;
         }
 
-        foreach (var group in DeviceCatalog.FindMagicTrackpads(DeviceActions.EnumerateRawInputDevices()).GroupBy(device => DeviceActions.PhysicalKey(device.Name)))
+        foreach (var group in DeviceCatalog.FindMagicTrackpads(DeviceActions.EnumerateRawInputDevices()).Where(ShouldHandleDevice).GroupBy(device => DeviceActions.PhysicalKey(device.Name)))
         {
             if (DeviceActions.EnableAnyCollection(group))
             {
@@ -159,14 +159,18 @@ internal sealed class BridgeApplicationContext : ApplicationContext
             }
         }
 
-        directReader.UpdateDevices(DeviceActions.EnumerateRawInputDevices());
+        directReader.UpdateDevices(DeviceActions.EnumerateRawInputDevices().Where(ShouldHandleDevice));
     }
+
+    private bool ShouldHandleDevice(HidDeviceInfo device) =>
+        !(config.UseWindowsPrecisionTouchpad && device.IsAppleMagicTrackpad && !device.IsBluetooth) &&
+        (!device.IsAppleKeyboard || config.Keyboard.Enabled);
 
     private void OnReport(HidDeviceInfo device, byte[] report)
     {
         lock (reportLock)
         {
-            if (IsDuplicateReport(device, report))
+            if (!ShouldHandleDevice(device) || IsDuplicateReport(device, report))
             {
                 return;
             }
@@ -175,6 +179,8 @@ internal sealed class BridgeApplicationContext : ApplicationContext
             if (device.IsAppleKeyboard)
             {
                 keyboard.ProcessKeyboardReport(device, report);
+                // Never write keyboard input to the raw trackpad log or gesture parser.
+                return;
             }
 
             if (config.LogRawReports)

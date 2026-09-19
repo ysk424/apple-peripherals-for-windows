@@ -20,7 +20,7 @@ else {
 
 $ResolvedRepo = [IO.Path]::GetFullPath($RepoRoot)
 $ResolvedArtifacts = [IO.Path]::GetFullPath($ArtifactsRoot)
-if (!$ResolvedArtifacts.StartsWith($ResolvedRepo, [StringComparison]::OrdinalIgnoreCase)) {
+if (!$ResolvedArtifacts.StartsWith($ResolvedRepo.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw "OutputDir must be inside the repository."
 }
 
@@ -87,6 +87,10 @@ New-Item -ItemType Directory -Force -Path $SetupOutDir | Out-Null
 
 Write-Host "Downloading signed Precision Touchpad driver package..."
 Invoke-WebRequest -Uri $DriverPackageUrl -OutFile $DriverZip
+$ExpectedDriverHash = "2870C0C7982CE6AAFC3FF763FEC2999423DC4BDBD1A2C0E31CA216F26A75714F"
+if ((Get-FileHash -LiteralPath $DriverZip -Algorithm SHA256).Hash -ne $ExpectedDriverHash) {
+    throw "Trackpad driver SHA-256 mismatch."
+}
 
 Write-Host "Publishing app payload..."
 dotnet publish $AppProject `
@@ -96,6 +100,8 @@ dotnet publish $AppProject `
     -p:PublishSingleFile=false `
     $versionArgs `
     -o $AppPayloadDir
+
+if ($LASTEXITCODE -ne 0) { throw "App publish failed: $LASTEXITCODE" }
 
 if (!(Test-Path (Join-Path $AppPayloadDir "MagicTrackpad.exe"))) {
     throw "MagicTrackpad.exe was not published to the app payload."
@@ -117,6 +123,8 @@ dotnet publish $SetupProject `
     -p:KeyboardDriverZip="$KeyboardDriverZipPath" `
     $versionArgs `
     -o $SetupOutDir
+
+if ($LASTEXITCODE -ne 0) { throw "Setup publish failed: $LASTEXITCODE" }
 
 $BuiltInstaller = Join-Path $SetupOutDir "ApplePeripheralsSetup.exe"
 if (!(Test-Path $BuiltInstaller)) {

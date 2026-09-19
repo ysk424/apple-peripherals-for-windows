@@ -1,89 +1,49 @@
 param(
-    [string]$PackageUrl = "https://github.com/vitoplantamura/MagicTrackpad2ForWindows/releases/download/v2.0/MT2FW11-20260223-MSSigned.zip",
+    [string]$PackagePath = (Join-Path $PSScriptRoot '..\artifacts\installer\MagicTrackpad2ForWindows-MSSigned.zip'),
     [string]$CacheDir = "$env:LOCALAPPDATA\ApplePeripheralsForWindows\drivers",
-    [switch]$KeepPackage
+    [switch]$VerifyOnly
 )
 
-$ErrorActionPreference = "Stop"
-
-function Test-Administrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$ErrorActionPreference = 'Stop'
+$expectedHash = '2870C0C7982CE6AAFC3FF763FEC2999423DC4BDBD1A2C0E31CA216F26A75714F'
+if (!(Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
+    throw 'Build the installer first or pass -PackagePath with the pinned v2.0 signed ZIP. No download is performed during installation.'
 }
-
-function Get-DriverArchitecture {
-    $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    if ($arch -eq [Runtime.InteropServices.Architecture]::Arm64) {
-        return "ARM64"
+if ((Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash -ne $expectedHash) {
+    throw 'Trackpad driver package SHA-256 mismatch.'
+}
+$architecture = switch ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
+    'X64' { 'AMD64' }
+    'Arm64' { 'ARM64' }
+    default { throw 'Only x64 and ARM64 Windows are supported.' }
+}
+$extractRoot = Join-Path ([IO.Path]::GetFullPath($CacheDir)) ('verified-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+Expand-Archive -LiteralPath $PackagePath -DestinationPath $extractRoot
+$driverDir = Join-Path $extractRoot "MT2FW11-20260223-MSSigned\$architecture"
+$infPath = Join-Path $driverDir 'AmtPtpDevice.inf'
+if (!(Test-Path -LiteralPath $infPath)) { throw 'Required driver INF is missing.' }
+foreach ($name in @('amtptpdevice.cat', 'AmtPtpDeviceUsbUm.dll', 'AmtPtpHidFilter.sys')) {
+    $path = Join-Path $driverDir $name
+    $signature = Get-AuthenticodeSignature -LiteralPath $path
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Windows Hardware Compatibility Publisher,') {
+        throw "Required Microsoft signature is invalid: $name"
     }
-
-    return "AMD64"
+    Write-Output "Verified Microsoft signature: $name"
 }
-
-function Assert-ValidSignature {
-    param([string]$Path)
-
-    $signature = Get-AuthenticodeSignature -FilePath $Path
-    if ($signature.Status -ne "Valid") {
-        throw "Signature check failed for $Path. Status: $($signature.Status)"
-    }
+if ($VerifyOnly) { return }
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Driver installation requires Administrator access. Run this script elevated.'
 }
-
-if (!(Test-Administrator)) {
-    throw "Installing the Precision Touchpad driver requires an elevated PowerShell window. Re-run this script as Administrator."
+# PnP validates catalog membership and binds only matching device IDs. No test signing.
+$systemDirectory = if ([Environment]::Is64BitOperatingSystem -and ![Environment]::Is64BitProcess) {
+    Join-Path $env:SystemRoot 'Sysnative'
+} else {
+    Join-Path $env:SystemRoot 'System32'
 }
-
-New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
-$zipPath = Join-Path $CacheDir "MagicTrackpad2ForWindows-MSSigned.zip"
-$extractRoot = Join-Path $CacheDir "MagicTrackpad2ForWindows-MSSigned"
-
-Write-Host "Downloading Microsoft-signed Magic Trackpad Precision driver..."
-Invoke-WebRequest -Uri $PackageUrl -OutFile $zipPath
-
-if (Test-Path $extractRoot) {
-    Remove-Item -LiteralPath $extractRoot -Recurse -Force
-}
-
-Expand-Archive -Path $zipPath -DestinationPath $extractRoot
-$packageRoot = Get-ChildItem -LiteralPath $extractRoot -Directory | Select-Object -First 1
-if ($packageRoot -eq $null) {
-    throw "Could not find extracted driver package root."
-}
-
-$architecture = Get-DriverArchitecture
-$driverDir = Join-Path $packageRoot.FullName $architecture
-$infPath = Join-Path $driverDir "AmtPtpDevice.inf"
-if (!(Test-Path $infPath)) {
-    throw "Could not find $architecture driver INF at $infPath"
-}
-
-Get-ChildItem -LiteralPath $driverDir -File | Where-Object { $_.Extension -in @(".cat", ".sys", ".dll") } | ForEach-Object {
-    Assert-ValidSignature -Path $_.FullName
-}
-
-$controlPanel = Join-Path $packageRoot.FullName "AmtPtpControlPanel.exe"
-if (Test-Path $controlPanel) {
-    Assert-ValidSignature -Path $controlPanel
-}
-
-Write-Host "Installing $architecture Precision Touchpad driver..."
-$pnputil = Join-Path $env:SystemRoot "System32\pnputil.exe"
-$process = Start-Process -FilePath $pnputil -ArgumentList @("/add-driver", "`"$infPath`"", "/install") -Wait -PassThru -NoNewWindow
-if ($process.ExitCode -notin @(0, 3010)) {
-    throw "pnputil failed with exit code $($process.ExitCode)."
-}
-
-$rebootRequired = $process.ExitCode -eq 3010
-
-if (!$KeepPackage -and (Test-Path $zipPath)) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
-Write-Host "Installed Magic Trackpad Precision Touchpad driver."
-if ($rebootRequired) {
-    Write-Warning "Windows reported that a reboot is required to finish binding the Precision Touchpad driver."
-}
-else {
-    Write-Host "If the trackpad still behaves as a basic mouse, disconnect/reconnect it or reboot Windows."
-}
+& (Join-Path $systemDirectory 'pnputil.exe') /add-driver $infPath /install
+$driverExit = $LASTEXITCODE
+if ($driverExit -notin @(0, 3010)) { throw "pnputil failed: $driverExit" }
+Write-Output "Driver installation exit code: $driverExit"
+if ($driverExit -eq 3010) { Write-Warning 'Windows requires a restart to finish driver installation.' }

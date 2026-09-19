@@ -54,7 +54,7 @@ internal static class HidDiagnostics
                     stats.ReportIds.Add(report[0]);
                 }
 
-                if (stats.SampleReports.Count < 8)
+                if (device.IsAppleMagicTrackpad && stats.SampleReports.Count < 8)
                 {
                     stats.SampleReports.Add(Convert.ToHexString(report));
                 }

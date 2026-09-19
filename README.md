@@ -1,12 +1,41 @@
 # Apple Peripherals for Windows
 
+## USB / offline .NET 10 fork
+
+This fork targets .NET 10 LTS (SDK 10.0.401, runtime 10.0.12 at review time).
+See [the security review](docs/security-review.md) for findings and limitations.
+
+For USB Magic Trackpad + Magic Keyboard:
+
+1. Build with `scripts/build-installer.ps1 -AppOnly`. This build step downloads the
+   pinned, Microsoft-signed Precision Touchpad driver and verifies its SHA-256.
+2. Run the resulting setup with `/install /quiet` as your ordinary user.
+3. From an Administrator PowerShell, run `scripts/install-trackpad-driver.ps1`.
+   This step uses the local ZIP only; it never downloads a driver.
+4. In `%USERPROFILE%\.magictrackpad-bridge.json`, set
+   `use_windows_precision_touchpad` to `true` and `enable_multitouch_on_start` to
+   `false`. Keep `log_raw_reports` set to `false`.
+
+Windows Settings > Bluetooth & devices > Touchpad controls USB scrolling and
+gestures. The app's gesture sliders apply to its own raw HID gesture engine,
+which is bypassed for USB trackpads in this configuration. Keyboard remapping
+continues through the local bridge: Command maps to Ctrl, Control to Win, and
+Option to Alt. KVM reconnection uses normal Windows Plug and Play.
+
+The installer runs without elevation by default. Driver installation is a
+separate elevated operation. Startup always uses ordinary user privileges.
+No optional keyboard filter is installed by the USB procedure above; Fn/Globe
+and Touch ID behavior are not guaranteed. There is no runtime downloader or
+browser-opening help link in this fork. Builds still need Microsoft/NuGet/GitHub
+downloads. The original upstream feature description follows.
+
 Native Windows settings app, background bridge, and driver installer for Apple Magic Trackpad and Magic Keyboard support over Bluetooth.
 
 Windows can pair Apple peripherals as Bluetooth HID devices, but many of the useful Mac-style behaviors are missing. This repo provides one C#/.NET Windows app that enables Magic Trackpad multitouch mode where user-mode HID access is available, reads reports through Raw Input plus direct HID collection readers, and applies the trackpad gestures and keyboard remaps you configure. For full Windows Precision Touchpad behavior, install the signed Precision driver with the driver installer below.
 
 ## Native App
 
-- Built with C# on .NET 8 and WinForms.
+- Built with C# on .NET 10 and WinForms.
 - Installs `MagicTrackpad.exe` as one per-user background bridge for keyboard and trackpad support.
 - Uses a light device-studio settings UI with separate Magic Trackpad and Magic Keyboard pages.
 - Adds Start Menu shortcuts for settings and manual bridge launch.
@@ -51,7 +80,7 @@ Hardware/Windows limits:
 Requirements:
 
 - Windows 10/11
-- .NET 8 SDK
+- .NET 10 SDK
 
 From the repo root:
 
@@ -104,7 +133,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\check-keyboard-filter-driver.
 
 Download `ApplePeripheralsSetup-win-x64.exe` from the latest GitHub release and run it. The setup app is self-contained: it bundles the app runtime, settings app, background bridge, and Microsoft-signed Magic Trackpad Precision Touchpad driver package. It starts the bridge for the current session, creates Start Menu shortcuts, and registers Apple Peripherals for Windows in Windows Apps / Control Panel for uninstall.
 
-Windows may show an Administrator/UAC prompt because setup installs driver packages. A restart may be required after driver installation.
+Run setup as Administrator only when explicitly installing bundled drivers. A restart may be required after driver installation.
 
 Installed files are written to:
 
@@ -204,7 +233,7 @@ Or install the app and driver together from an elevated PowerShell window:
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -InstallPrecisionTrackpadDriver
 ```
 
-The driver installer downloads the Microsoft-signed MagicTrackpad2ForWindows package, verifies Authenticode signatures, selects AMD64 or ARM64, and installs `AmtPtpDevice.inf` with `pnputil`. Reconnect the trackpad or reboot if Windows keeps the old mouse binding loaded.
+The driver installer consumes the local, SHA-256-pinned MagicTrackpad2ForWindows package, requires Microsoft Authenticode signatures, selects AMD64 or ARM64, and installs `AmtPtpDevice.inf` with `pnputil`. Reconnect the trackpad or reboot if Windows keeps the old mouse binding loaded.
 
 ## Magic Keyboard Globe/Fn Driver
 

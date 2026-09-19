@@ -1,6 +1,6 @@
 # Architecture
 
-Apple Peripherals for Windows is a native Windows desktop application written in C# on .NET 8. The app is split into small layers so HID access, keyboard remapping, gesture interpretation, settings, and Windows input injection can be tested and changed independently.
+Apple Peripherals for Windows is a native Windows desktop application written in C# on .NET 10. The app is split into small layers so HID access, keyboard remapping, gesture interpretation, settings, and Windows input injection can be tested and changed independently.
 
 ## Runtime Shape
 

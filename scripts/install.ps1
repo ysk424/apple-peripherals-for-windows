@@ -41,7 +41,7 @@ function Test-Administrator {
 }
 
 if (!(Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw ".NET 8 SDK is required to build and install MagicTrackpad.exe. Install Microsoft.DotNet.SDK.8, then run this script again."
+    throw ".NET 10 SDK is required to build and install MagicTrackpad.exe. Install Microsoft.DotNet.SDK.10, then run this script again."
 }
 
 Stop-MagicTrackpadProcesses
@@ -62,19 +62,21 @@ foreach ($legacyPath in @($LegacyStartMenuDir, $LegacyStartupShortcutPath, $Lega
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 dotnet publish $ProjectPath -c Release -r $Runtime --self-contained true -p:PublishSingleFile=false -o $AppDir
 
+if ($LASTEXITCODE -ne 0) { throw "App publish failed: $LASTEXITCODE" }
+
 $ExePath = Join-Path $AppDir "MagicTrackpad.exe"
 if (!(Test-Path $ExePath)) {
     throw "Publish completed but MagicTrackpad.exe was not found at $ExePath"
 }
 
 if (!(Test-Path $ConfigPath)) {
-    $ConfigProcess = Start-Process -FilePath $ExePath -ArgumentList "--write-config --config `"$ConfigPath`"" -Wait -PassThru
+    $ConfigProcess = Start-Process -WindowStyle Hidden -FilePath $ExePath -ArgumentList "--write-config --config `"$ConfigPath`"" -Wait -PassThru
     if ($ConfigProcess.ExitCode -ne 0) {
         throw "Could not create default config at $ConfigPath"
     }
 }
 else {
-    $ConfigProcess = Start-Process -FilePath $ExePath -ArgumentList "--migrate-config --config `"$ConfigPath`"" -Wait -PassThru
+    $ConfigProcess = Start-Process -WindowStyle Hidden -FilePath $ExePath -ArgumentList "--migrate-config --config `"$ConfigPath`"" -Wait -PassThru
     if ($ConfigProcess.ExitCode -ne 0) {
         throw "Could not migrate config at $ConfigPath"
     }
@@ -101,7 +103,7 @@ $TaskInstalled = $false
 try {
     $Action = New-ScheduledTaskAction -Execute $ExePath -Argument "--bridge --config `"$ConfigPath`"" -WorkingDirectory $AppDir
     $Trigger = New-ScheduledTaskTrigger -AtLogOn
-    $RunLevel = if (Test-Administrator) { "Highest" } else { "Limited" }
+    $RunLevel = "Limited"
     $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel $RunLevel
     $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force | Out-Null
@@ -115,7 +117,7 @@ catch {
     $StartupShortcut.WorkingDirectory = $AppDir
     $StartupShortcut.Description = "Start Apple keyboard and trackpad support at sign in"
     $StartupShortcut.Save()
-    Start-Process -FilePath $ExePath -ArgumentList "--bridge --config `"$ConfigPath`"" -WorkingDirectory $AppDir
+    Start-Process -WindowStyle Hidden -FilePath $ExePath -ArgumentList "--bridge --config `"$ConfigPath`"" -WorkingDirectory $AppDir
     Write-Warning "Scheduled task was not registered; installed Startup shortcut and started the bridge for this session. $($_.Exception.Message)"
 }
 

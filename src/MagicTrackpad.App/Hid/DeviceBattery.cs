@@ -273,7 +273,7 @@ $devices | ForEach-Object {
 
             using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
                 Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -Command -",
                 UseShellExecute = false,
                 CreateNoWindow = true,

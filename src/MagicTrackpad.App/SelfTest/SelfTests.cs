@@ -183,6 +183,7 @@ Catalog File:       keyboard.cat
         Require(!KeyboardRemapper.TryGetAppleFnState([0x00, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00], out _));
         Require(!KeyboardRemapper.TryGetAppleFnState([0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80], out _));
         config.Gestures.PointerSensitivity = 0.73;
+        config.UseWindowsPrecisionTouchpad = true;
         config.Gestures.SwapLeftRightButtons = true;
         config.Keyboard.FKeyMode = "custom";
         config.Keyboard.F1 = "Win+H";
@@ -191,6 +192,7 @@ Catalog File:       keyboard.cat
         var loaded = ConfigStore.Load(path);
         File.Delete(path);
         Require(Math.Abs(loaded.Gestures.PointerSensitivity - 0.73) < 0.001);
+        Require(loaded.UseWindowsPrecisionTouchpad);
         Require(loaded.Gestures.SwapLeftRightButtons);
         Require(loaded.Keyboard.FKeyMode == "custom");
         Require(loaded.Keyboard.F1 == "Win+H");

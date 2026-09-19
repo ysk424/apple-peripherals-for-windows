@@ -7,6 +7,8 @@ public sealed class AppConfig
     public GestureConfig Gestures { get; set; } = new();
     public KeyboardConfig Keyboard { get; set; } = new();
     public bool EnableMultitouchOnStart { get; set; } = true;
+    // Let the signed Windows driver own USB touch input; avoid duplicate gestures.
+    public bool UseWindowsPrecisionTouchpad { get; set; }
     public double ReenableIntervalSeconds { get; set; } = 15.0;
     public bool LogRawReports { get; set; }
     public string RawLogPath { get; set; } = "logs/raw-reports.hex";

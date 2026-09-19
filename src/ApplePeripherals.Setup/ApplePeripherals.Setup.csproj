@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ApplePeripheralsSetup</AssemblyName>
     <RootNamespace>ApplePeripherals.Setup</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.3.8</Version>
+    <Version>0.3.9-usb-local</Version>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(PayloadZip)' != ''">

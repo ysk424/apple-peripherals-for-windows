@@ -1170,18 +1170,12 @@ public sealed class SettingsForm : Form
 
     private void OpenKeyboardDriverGuide()
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://github.com/sheehanmunim/apple-peripherals-for-windows/blob/main/docs/keyboard-filter-driver.md",
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Apple Peripherals", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        MessageBox.Show(this,
+            "USB keyboard modifier remapping works through the local bridge. " +
+            "Globe/Fn support depends on the keyboard model and an optional signed filter driver. " +
+            "This offline build does not download or install that optional driver. " +
+            "See docs/keyboard-filter-driver.md in the source checkout.",
+            "Keyboard driver guide", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private sealed record InstallBundleState(bool? HasBundledKeyboardDriver);
@@ -2115,6 +2109,7 @@ internal sealed class ThemedGroupBox : GroupBox
 
 internal sealed class LevelMeter : Control
 {
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public int? Value { get; init; }
 
     protected override void OnPaint(PaintEventArgs e)

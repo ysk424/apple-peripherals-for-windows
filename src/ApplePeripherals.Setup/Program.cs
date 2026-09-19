@@ -185,7 +185,7 @@ internal static class Installer
         ?? typeof(Installer).Assembly.GetName().Version?.ToString()
         ?? "0.0.0";
     private const string TaskName = "ApplePeripheralsBridge";
-    private const string DriverPackageUrl = "https://github.com/vitoplantamura/MagicTrackpad2ForWindows/releases/download/v2.0/MT2FW11-20260223-MSSigned.zip";
+    private const string DriverPackageSha256 = "2870C0C7982CE6AAFC3FF763FEC2999423DC4BDBD1A2C0E31CA216F26A75714F";
     private const string DriverResourceName = "MagicTrackpad2ForWindows-MSSigned.zip";
     private const string KeyboardDriverResourceName = "AppleKeyboardFilterDriver.zip";
     private const string UninstallRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ApplePeripheralsForWindows";
@@ -226,6 +226,10 @@ internal static class Installer
 
     public static InstallResult Install(bool installDriver, IProgress<string> progress)
     {
+        if (installDriver && !IsAdministrator)
+        {
+            throw new InvalidOperationException("Driver installation requires Administrator access. App-only installation can run without elevation.");
+        }
         progress.Report("Stopping existing bridge...");
         StopBridgeProcesses();
         DeleteScheduledTask("MagicTrackpadBridge");
@@ -440,7 +444,7 @@ internal static class Installer
 
     private static bool TryRegisterStartupTask(string appExe)
     {
-        var runLevel = IsAdministrator ? "HIGHEST" : "LIMITED";
+        const string runLevel = "LIMITED";
         var taskRun = $"\"{appExe}\" --bridge --config \"{ConfigPath}\"";
         var args = $"/Create /TN \"{TaskName}\" /TR \"{taskRun}\" /SC ONLOGON /RL {runLevel} /F";
         return TryRunProcess("schtasks.exe", args, wait: true, out var exitCode) && exitCode == 0;
@@ -463,13 +467,16 @@ internal static class Installer
             }
             else
             {
-                progress.Report("Downloading Precision Touchpad driver package...");
-                using var client = new HttpClient();
-                using var response = client.GetAsync(DriverPackageUrl).GetAwaiter().GetResult();
-                response.EnsureSuccessStatusCode();
-                using var source = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
-                using var target = File.Create(zipPath);
-                source.CopyTo(target);
+                throw new InvalidOperationException("The verified driver package must be bundled. This installer never downloads drivers.");
+            }
+        }
+
+        using (var archive = File.OpenRead(zipPath))
+        {
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(archive));
+            if (!string.Equals(hash, DriverPackageSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Trackpad driver package SHA-256 mismatch.");
             }
         }
 
@@ -487,7 +494,7 @@ internal static class Installer
 
         foreach (var file in Directory.EnumerateFiles(driverDir).Where(path => path.EndsWith(".cat", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".sys", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
         {
-            AssertValidSignature(file);
+            AssertValidSignature(file, requireMicrosoftSigner: true);
         }
 
         var controlPanel = Path.Combine(packageRoot, "AmtPtpControlPanel.exe");
